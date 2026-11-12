@@ -3,7 +3,8 @@
 Client mod that replaces the red resource reload screen with an animation taken from your resource packs.
 
 ## Features
-- Shows a looping animation instead of the red Mojang screen, both at game start and on resource reloads.
+- Shows an animation instead of the red Mojang screen, both at game start and on resource reloads.
+- Three playback modes: loop, ping-pong, and one-shot that follows the loading progress.
 - The animation comes from any resource pack you use; the pack with the highest priority wins.
 - Keeps the vanilla fade-in and fade-out.
 - Emergency switch, intensity limit and a no-motion mode.
@@ -27,19 +28,32 @@ assets/reloadanim/textures/gui/loading.png.mcmeta   (optional)
 ```
 
 `loading.png` is a vertical strip: all frames stacked on top of each other, each frame as wide as the image.
-The optional `loading.png.mcmeta` uses the same format as vanilla animated textures:
+The optional `loading.png.mcmeta` uses the format of vanilla animated textures plus a `mode` key:
 
 ```json
 {
   "animation": {
+    "mode": "once",
+    "height": 1080,
     "frametime": 2,
-    "frames": [0, 1, 2, 3]
+    "frames": [0, 1, 2]
   }
 }
 ```
 
-`frametime` is in ticks (1 tick = 50 ms). Without a `.mcmeta` file frames are square and play in order at one tick per frame.
-Limits: up to 512 px wide, up to 16384 px tall, up to 256 frames, file size up to 16 MiB.
+| Key | Default | Description |
+|---|---|---|
+| `mode` | `loop` | `loop` repeats the animation, `pingpong` plays it forward and backward, `once` plays it a single time following the loading progress |
+| `height` | image width | Height of one frame; the image height must be a whole multiple of it. A 1920x3240 image with `"height": 1080` is three frames of 1920x1080 |
+| `width` | image width | Must equal the image width |
+| `frametime` | `1` | Ticks per frame (1 tick = 50 ms), 1 to 200. Not used by `once` |
+| `frames` | all, in order | Order in which frames are played, for example `[0, 1, 2, 1]` |
+
+In `once` mode the animation does not depend on time: the more of the game has loaded, the later the frame, and the last frame stays on screen until the loading screen fades out.
+
+Without a `.mcmeta` file frames are square and play in a loop, one tick per frame.
+Limits: image up to 4096 px wide and 16384 px tall, up to 32 megapixels in total, up to 256 frames, file size up to 64 MiB.
+Large frames use a lot of memory: a 1920x1080 frame needs about 8 MiB of memory and as much video memory.
 
 ## Commands
 | Command | Description |
@@ -81,7 +95,7 @@ None.
 ## Troubleshooting
 - **The vanilla screen is still shown after installing a pack.** The animation is shown from the next loading screen on: reload resources once more with F3+T.
 - **The first launch after installing the mod shows the red screen.** No animation has been saved yet; it appears once you have loaded the game with a suitable pack.
-- **The animation does not appear.** Run `/ra status`. Check the file path and the limits listed above; problems are written to the game log.
+- **The animation does not appear.** Run `/ra status`. Check the file path, that the frame height divides the image height, and the limits listed above; problems are written to the game log.
 - **The animation disappeared after an error.** The mod switches itself off for the session if drawing fails; `/ra on` tries again.
 
 ## License

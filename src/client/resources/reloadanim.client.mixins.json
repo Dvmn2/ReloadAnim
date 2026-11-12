@@ -4,6 +4,7 @@
   "package": "net.dvmn2.reloadanim.client.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "SplashOverlayAccessor",
     "SplashOverlayMixin"
   ],
   "injectors": {

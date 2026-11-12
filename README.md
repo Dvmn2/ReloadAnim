@@ -24,7 +24,7 @@ net.dvmn2.reloadanim.client
 ├── animation/                  // finding, caching and holding the animation
 ├── command/                    // /ra
 ├── io/                         // atomic writes, size-checked reads
-├── mixin/                      // SplashOverlayMixin
+├── mixin/                      // SplashOverlayMixin, SplashOverlayAccessor
 └── overlay/                    // drawing and mixin target descriptors
 ```
 
@@ -36,8 +36,9 @@ net.dvmn2.reloadanim.client
 | `AnimationCache` | `<gameDir>/reloadanim/cache/`: raw PNG + `meta.json`, replaced atomically under one lock |
 | `AnimationLibrary` | stages the decoded cache and uploads it as a GPU texture on the render thread |
 | `AnimationMeta` | validated strip description and the limits for it |
-| `LoadingAnimationRenderer` | picks the frame by time and draws it; decides whether the mod is active |
+| `LoadingAnimationRenderer` | picks the frame (by time or by loading progress) and draws it; decides whether the mod is active |
 | `SplashOverlayMixin` | replaces four parts of the vanilla overlay (see below), contains no logic |
+| `SplashOverlayAccessor` | read access to the vanilla `progress` and `reloadCompleteTime` fields |
 
 Threading:
 - Prepare stage of the reloader and `AnimationLibrary.refreshAsync()` run off the client thread and do all disk work.
@@ -58,13 +59,28 @@ None.
 |---|---|
 | `config/reloadanim.json` | player settings, see `MODRINTH.md` for the keys |
 | `<gameDir>/reloadanim/cache/animation.png` | strip copied as-is from the winning pack |
-| `<gameDir>/reloadanim/cache/meta.json` | cache format version 1: pack id, frame size, frame time, sequence |
+| `<gameDir>/reloadanim/cache/meta.json` | cache format version 2: pack id, frame size, frame time, mode, sequence |
 
 Pack format: a vertical PNG strip `assets/reloadanim/textures/gui/loading.png` with an optional
-`loading.png.mcmeta` in the vanilla animation format (`frametime`, `frames`, `width`, `height`).
-Limits: width up to 512 px, height up to 16384 px, up to 256 frames, PNG up to 16 MiB, metadata up to 64 KiB.
-Sizes are read from the PNG header and checked before decoding.
+`loading.png.mcmeta` in the vanilla animation format plus one extra key:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mode` | `loop` | `loop`, `once` or `pingpong` |
+| `width` | image width | must equal the image width |
+| `height` | image width | frame height; must divide the image height (1920x3240 with `1080` is 3 frames) |
+| `frametime` | `1` | ticks per frame, 1..200; ignored by `once` |
+| `frames` | all, in order | playback order; numbers or `{"index": n}` |
+
+Limits: image width up to 4096 px, height up to 16384 px, at most 32 megapixels in total, at most 256 frames,
+PNG up to 64 MiB, metadata up to 64 KiB. Sizes are read from the PNG header and checked before decoding.
 Anything outside the limits is skipped with a warning and the vanilla screen is used.
+
+Modes:
+- `loop`: the sequence repeats by time.
+- `pingpong`: forward, then backward, by time; end frames are not repeated (`0 1 2 1 0 1 2 ...`).
+- `once`: no time at all. The frame follows the loading progress: `floor(progress * length)`, and the last frame
+  is held once the reload has finished.
 
 An unknown cache version or damaged cache reads as "no cache"; there is no migration, the next reload rebuilds it.
 
@@ -75,6 +91,9 @@ An unknown cache version or damaged cache reads as "no cache"; there is no migra
 - **Vanilla timing is kept.** The mixin does not replace `SplashOverlay#render`. It wraps four calls inside it:
   the background colour (to black), the first logo half (to the animation), the second logo half and the progress
   bar (skipped). Vanilla still owns fading and completion, and its logo alpha is reused as the animation alpha.
+- **`once` mode reads two private vanilla fields** through `SplashOverlayAccessor`: `progress` (already smoothed
+  by vanilla, so frames do not jitter) and `reloadCompleteTime`. A game update that renames them fails at start-up.
+- **`reduced-motion` shows the first frame in every mode**, because frame changes driven by progress are motion too.
 - **Mixin targets are full descriptors** kept in `SplashTargets`, because the mixin package must contain only mixins.
   All injectors are required (`defaultRequire: 1`): if a game update moves a target, the client fails at start-up
   instead of silently showing the wrong screen.
@@ -84,7 +103,8 @@ An unknown cache version or damaged cache reads as "no cache"; there is no migra
 - **Errors while drawing disable the animation** for the rest of the session (logged once); `/ra on` or
   `/ra reload` re-enables it.
 - **No server state.** The mod never talks to servers, so nothing is cleared on disconnect.
-- The whole strip stays in memory (up to 32 MB for the largest allowed strip) while the animation is loaded.
+- The whole strip stays in memory (up to 128 MiB of pixels for the largest allowed strip) while the
+  animation is loaded, plus the same amount on the GPU. 1920x1080 frames cost about 8 MiB each.
 
 ## License
 All rights reserved.

@@ -9,45 +9,79 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.IntStream;
 
 /**
  * Validated description of an animation strip: a PNG whose frames are stacked vertically.
  *
- * <p>Immutable and thread-safe. The optional {@code .png.mcmeta} file follows the vanilla animation format;
- * only a subset is supported:
+ * <p>Immutable and thread-safe. The optional {@code .png.mcmeta} file follows the vanilla animation format
+ * with one extra key; only a subset is supported:
  * <pre>
  * {
  *   "animation": {
- *     "width": 64,        // optional, must equal the image width
- *     "height": 64,       // optional, defaults to the image width (square frames)
- *     "frametime": 2,     // optional, ticks per frame (1 tick = 50 ms), 1..200
+ *     "mode": "loop",     // optional: "loop" (default), "once" or "pingpong"
+ *     "width": 1920,      // optional, must equal the image width
+ *     "height": 1080,     // optional, defaults to the image width (square frames)
+ *     "frametime": 2,     // optional, ticks per frame (1 tick = 50 ms), 1..200; unused by "once"
  *     "frames": [0, 1, 2] // optional, playback order; entries may be numbers or {"index": n}
  *   }
  * }
  * </pre>
- * Per-frame {@code time}, {@code interpolate} and horizontal strips are ignored or rejected.
+ * The image height must be a whole multiple of the frame height: a 1920x3240 image with {@code "height": 1080}
+ * is three frames of 1920x1080. Per-frame {@code time}, {@code interpolate} and horizontal strips are not supported.
  *
  * @param frameWidth  width of one frame, pixels
  * @param frameHeight height of one frame, pixels
  * @param stripFrames number of frames stored in the image
  * @param frameTimeMs how long each frame is shown, milliseconds
+ * @param mode        how the sequence is played
  * @param sequence    playback order as indices into the strip, never empty
  */
-public record AnimationMeta(int frameWidth, int frameHeight, int stripFrames, int frameTimeMs,
+public record AnimationMeta(int frameWidth, int frameHeight, int stripFrames, int frameTimeMs, Mode mode,
         List<Integer> sequence) {
 
-    public static final int MAX_FRAME_SIZE_PX = 512;
+    public static final int MAX_IMAGE_WIDTH_PX = 4_096;
     public static final int MAX_STRIP_HEIGHT_PX = 16_384; // common GPU texture size limit
     public static final int MAX_STRIP_FRAMES = 256;
+    public static final int MAX_PIXELS = 32 * 1024 * 1024; // 32 megapixels, 128 MiB of RGBA
     public static final int MAX_SEQUENCE_LENGTH = 1_024;
-    public static final int MAX_PNG_BYTES = 16 * 1024 * 1024; // bytes
+    public static final int MAX_PNG_BYTES = 64 * 1024 * 1024; // bytes
     public static final int MAX_JSON_BYTES = 64 * 1024; // bytes
 
     private static final int MS_PER_TICK = 50;
     private static final int MIN_FRAME_TIME_TICKS = 1;
     private static final int MAX_FRAME_TIME_TICKS = 200;
     private static final String SECTION_KEY = "animation";
+
+    /** How the playback sequence is traversed. */
+    public enum Mode {
+        /** Plays the sequence again and again by time. */
+        LOOP,
+        /** Plays the sequence once, following the loading progress instead of time. */
+        ONCE,
+        /** Plays forward, then backward, by time, without repeating the end frames. */
+        PINGPONG;
+
+        /** Returns the name used in {@code .mcmeta} and in the cache. */
+        public String serializedName() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+
+        /**
+         * Finds a mode by its serialized name.
+         *
+         * @throws IllegalArgumentException if the name is unknown
+         */
+        public static Mode fromName(String name) {
+            for (Mode mode : values()) {
+                if (mode.serializedName().equals(name.toLowerCase(Locale.ROOT))) {
+                    return mode;
+                }
+            }
+            throw new IllegalArgumentException("Unknown animation mode: " + name);
+        }
+    }
 
     public AnimationMeta {
         sequence = List.copyOf(sequence);
@@ -59,22 +93,24 @@ public record AnimationMeta(int frameWidth, int frameHeight, int stripFrames, in
      * @param imageWidth        image width, pixels
      * @param imageHeight       image height, pixels
      * @param frameWidth        frame width, pixels; must equal the image width
-     * @param frameHeight       frame height, pixels
+     * @param frameHeight       frame height, pixels; must divide the image height
      * @param frameTimeMs       frame duration, milliseconds; clamped to the supported range
+     * @param mode              playback mode
      * @param requestedSequence playback order, or empty for all frames in order
      * @throws IllegalArgumentException if any value is outside the supported limits
      */
     public static AnimationMeta create(int imageWidth, int imageHeight, int frameWidth, int frameHeight,
-            int frameTimeMs, List<Integer> requestedSequence) {
-        if (imageWidth < 1 || imageWidth > MAX_FRAME_SIZE_PX || imageHeight < 1
-                || imageHeight > MAX_STRIP_HEIGHT_PX) {
+            int frameTimeMs, Mode mode, List<Integer> requestedSequence) {
+        if (imageWidth < 1 || imageWidth > MAX_IMAGE_WIDTH_PX || imageHeight < 1
+                || imageHeight > MAX_STRIP_HEIGHT_PX || (long) imageWidth * imageHeight > MAX_PIXELS) {
             throw new IllegalArgumentException("Image size " + imageWidth + "x" + imageHeight + " is not supported");
         }
         if (frameWidth != imageWidth) {
             throw new IllegalArgumentException("Frame width must equal the image width (vertical strips only)");
         }
-        if (frameHeight < 1 || frameHeight > MAX_FRAME_SIZE_PX || imageHeight % frameHeight != 0) {
-            throw new IllegalArgumentException("Frame height " + frameHeight + " does not fit the image");
+        if (frameHeight < 1 || frameHeight > imageHeight || imageHeight % frameHeight != 0) {
+            throw new IllegalArgumentException("Frame height " + frameHeight + " does not divide the image height "
+                    + imageHeight);
         }
         int stripFrames = imageHeight / frameHeight;
         if (stripFrames > MAX_STRIP_FRAMES) {
@@ -93,7 +129,7 @@ public record AnimationMeta(int frameWidth, int frameHeight, int stripFrames, in
         }
         int clampedTime = Math.clamp(frameTimeMs, MIN_FRAME_TIME_TICKS * MS_PER_TICK,
                 MAX_FRAME_TIME_TICKS * MS_PER_TICK);
-        return new AnimationMeta(frameWidth, frameHeight, stripFrames, clampedTime, sequence);
+        return new AnimationMeta(frameWidth, frameHeight, stripFrames, clampedTime, mode, sequence);
     }
 
     /**
@@ -108,6 +144,7 @@ public record AnimationMeta(int frameWidth, int frameHeight, int stripFrames, in
         int frameWidth = imageWidth;
         int frameHeight = imageWidth;
         int frameTimeTicks = MIN_FRAME_TIME_TICKS;
+        Mode mode = Mode.LOOP;
         List<Integer> sequence = List.of();
         if (json != null) {
             try {
@@ -116,6 +153,9 @@ public record AnimationMeta(int frameWidth, int frameHeight, int stripFrames, in
                     frameWidth = readInt(section, "width", frameWidth);
                     frameHeight = readInt(section, "height", frameHeight);
                     frameTimeTicks = readInt(section, "frametime", frameTimeTicks);
+                    if (section.has("mode")) {
+                        mode = Mode.fromName(section.get("mode").getAsString());
+                    }
                     if (section.has("frames")) {
                         sequence = readFrames(section.getAsJsonArray("frames"));
                     }
@@ -126,7 +166,7 @@ public record AnimationMeta(int frameWidth, int frameHeight, int stripFrames, in
             }
         }
         int ticks = Math.clamp(frameTimeTicks, MIN_FRAME_TIME_TICKS, MAX_FRAME_TIME_TICKS);
-        return create(imageWidth, imageHeight, frameWidth, frameHeight, ticks * MS_PER_TICK, sequence);
+        return create(imageWidth, imageHeight, frameWidth, frameHeight, ticks * MS_PER_TICK, mode, sequence);
     }
 
     private static int readInt(JsonObject section, String key, int fallback) {

@@ -38,7 +38,9 @@ public abstract class SplashOverlayMixin {
     private void reloadanim$drawAnimation(DrawContext context, RenderPipeline pipeline, Identifier texture,
             int x, int y, float u, float v, int width, int height, int regionWidth, int regionHeight,
             int textureWidth, int textureHeight, int color, Operation<Void> original) {
-        if (!LoadingAnimationRenderer.draw(context, color)) {
+        SplashOverlayAccessor accessor = (SplashOverlayAccessor) (Object) this;
+        if (!LoadingAnimationRenderer.draw(context, color, accessor.reloadanim$getProgress(),
+                accessor.reloadanim$getReloadCompleteTime())) {
             original.call(context, pipeline, texture, x, y, u, v, width, height, regionWidth, regionHeight,
                     textureWidth, textureHeight, color);
         }

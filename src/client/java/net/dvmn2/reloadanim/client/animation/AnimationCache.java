@@ -23,14 +23,14 @@ import java.util.List;
  *
  * <pre>
  * &lt;gameDir&gt;/reloadanim/cache/animation.png   raw strip, copied as-is
- * &lt;gameDir&gt;/reloadanim/cache/meta.json        {@code MetaDto}, version 1
+ * &lt;gameDir&gt;/reloadanim/cache/meta.json        {@code MetaDto}, version 2
  * </pre>
  * Both files are replaced under one lock, so a reader never sees a new image with old metadata.
  * Thread-safe; every method may be called from any thread.
  */
 final class AnimationCache {
 
-    private static final int FORMAT_VERSION = 1;
+    private static final int FORMAT_VERSION = 2;
     private static final int MAX_PACK_ID_LENGTH = 256;
     private static final String DIRECTORY = "reloadanim";
     private static final String CACHE_DIRECTORY = "cache";
@@ -50,6 +50,7 @@ final class AnimationCache {
         public int frameHeight;
         @SerializedName("frame-time-ms")
         public int frameTimeMs;
+        public String mode;
         public List<Integer> sequence;
     }
 
@@ -64,6 +65,7 @@ final class AnimationCache {
         dto.frameWidth = animation.meta().frameWidth();
         dto.frameHeight = animation.meta().frameHeight();
         dto.frameTimeMs = animation.meta().frameTimeMs();
+        dto.mode = animation.meta().mode().serializedName();
         dto.sequence = animation.meta().sequence();
         byte[] meta = GSON.toJson(dto).getBytes(StandardCharsets.UTF_8);
         synchronized (LOCK) {
@@ -102,14 +104,15 @@ final class AnimationCache {
                 String json = new String(SafeFiles.readLimited(metaFile, AnimationMeta.MAX_JSON_BYTES),
                         StandardCharsets.UTF_8);
                 MetaDto dto = GSON.fromJson(json, MetaDto.class);
-                if (dto == null || dto.version != FORMAT_VERSION || dto.pack == null || dto.sequence == null) {
+                if (dto == null || dto.version != FORMAT_VERSION || dto.pack == null || dto.mode == null
+                        || dto.sequence == null) {
                     LOGGER.warn("Ignoring the animation cache: unsupported format");
                     return null;
                 }
                 byte[] bytes = SafeFiles.readLimited(png, AnimationMeta.MAX_PNG_BYTES);
                 PngHeader.Size size = PngHeader.read(bytes);
                 AnimationMeta meta = AnimationMeta.create(size.width(), size.height(), dto.frameWidth,
-                        dto.frameHeight, dto.frameTimeMs, dto.sequence);
+                        dto.frameHeight, dto.frameTimeMs, AnimationMeta.Mode.fromName(dto.mode), dto.sequence);
                 NativeImage image = NativeImage.read(new ByteArrayInputStream(bytes));
                 return new CachedAnimation(image, meta, limit(dto.pack));
             } catch (IOException | JsonParseException | IllegalArgumentException ex) {

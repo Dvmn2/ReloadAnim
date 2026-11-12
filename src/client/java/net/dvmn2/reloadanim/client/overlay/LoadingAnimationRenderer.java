@@ -37,23 +37,25 @@ public final class LoadingAnimationRenderer {
     /**
      * Draws the current frame, centred and scaled to fit the screen.
      *
-     * @param context      draw context of the overlay
-     * @param vanillaColor ARGB colour vanilla uses for the logo; only its alpha is used
+     * @param context            draw context of the overlay
+     * @param vanillaColor       ARGB colour vanilla uses for the logo; only its alpha is used
+     * @param progress           smoothed loading progress from the vanilla overlay, 0.0 to 1.0
+     * @param reloadCompleteTime vanilla completion timestamp; zero or negative while still loading
      * @return true if the frame was drawn (or intentionally skipped), false if vanilla should draw the logo
      */
-    public static boolean draw(DrawContext context, int vanillaColor) {
+    public static boolean draw(DrawContext context, int vanillaColor, float progress, long reloadCompleteTime) {
         if (!isActive()) {
             return false;
         }
         try {
-            return renderFrame(context, vanillaColor);
+            return renderFrame(context, vanillaColor, progress, reloadCompleteTime > 0);
         } catch (RuntimeException ex) {
             AnimationLibrary.disable(ex);
             return false;
         }
     }
 
-    private static boolean renderFrame(DrawContext context, int vanillaColor) {
+    private static boolean renderFrame(DrawContext context, int vanillaColor, float progress, boolean complete) {
         ReloadAnimConfig config = ReloadAnimConfig.get();
         AnimationMeta meta = AnimationLibrary.acquire(MinecraftClient.getInstance().getTextureManager());
         if (meta == null) {
@@ -63,7 +65,7 @@ public final class LoadingAnimationRenderer {
         if (alpha <= 0) {
             return true;
         }
-        int stripFrame = meta.sequence().get(sequenceIndex(meta, config.reducedMotion));
+        int stripFrame = meta.sequence().get(config.reducedMotion ? 0 : sequenceIndex(meta, progress, complete));
         int screenWidth = context.getScaledWindowWidth();
         int screenHeight = context.getScaledWindowHeight();
         float scale = Math.min((float) screenWidth / meta.frameWidth(), (float) screenHeight / meta.frameHeight());
@@ -86,16 +88,38 @@ public final class LoadingAnimationRenderer {
         return true;
     }
 
-    private static int sequenceIndex(AnimationMeta meta, boolean reducedMotion) {
-        if (reducedMotion) {
+    private static int sequenceIndex(AnimationMeta meta, float progress, boolean complete) {
+        int length = meta.sequence().size();
+        return switch (meta.mode()) {
+            case ONCE -> byProgress(length, progress, complete);
+            case LOOP -> (int) (elapsedSteps(meta) % length);
+            case PINGPONG -> pingPong(length, elapsedSteps(meta));
+        };
+    }
+
+    private static int byProgress(int length, float progress, boolean complete) {
+        if (complete) {
+            return length - 1;
+        }
+        return Math.min(length - 1, (int) (Math.clamp(progress, 0.0F, 1.0F) * length));
+    }
+
+    private static int pingPong(int length, long steps) {
+        if (length == 1) {
             return 0;
         }
+        int cycle = 2 * length - 2;
+        int position = (int) (steps % cycle);
+        return position < length ? position : cycle - position;
+    }
+
+    /** Number of whole frame durations since this loading screen appeared. */
+    private static long elapsedSteps(AnimationMeta meta) {
         long now = System.nanoTime();
         if (now - lastDrawNanos > SESSION_GAP_NANOS) {
             sessionStartNanos = now;
         }
         lastDrawNanos = now;
-        long elapsedMs = (now - sessionStartNanos) / NANOS_PER_MS;
-        return (int) ((elapsedMs / meta.frameTimeMs()) % meta.sequence().size());
+        return (now - sessionStartNanos) / NANOS_PER_MS / meta.frameTimeMs();
     }
 }
