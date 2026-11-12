@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "reloadanim",
+  "version": "${version}",
+  "name": "ReloadAnim",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/reloadanim/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-datagen": [
+      "net.dvmn2.reloadanim.client.ReloadanimDataGenerator"
+    ],
+    "client": [
+      "net.dvmn2.reloadanim.client.ReloadanimClient"
+    ],
+    "main": [
+      "net.dvmn2.reloadanim.Reloadanim"
+    ]
+  },
+  "mixins": [
+    "reloadanim.mixins.json",
+    {
+      "config": "reloadanim.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
