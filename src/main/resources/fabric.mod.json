@@ -3,25 +3,15 @@
   "id": "reloadanim",
   "version": "${version}",
   "name": "ReloadAnim",
-  "description": "",
-  "authors": [],
+  "description": "Replaces the red resource reload screen with an animation taken from your resource packs.",
+  "authors": ["DVMN2"],
   "contact": {},
   "license": "All-Rights-Reserved",
-  "icon": "assets/reloadanim/icon.png",
   "environment": "client",
   "entrypoints": {
-    "fabric-datagen": [
-      "net.dvmn2.reloadanim.client.ReloadanimDataGenerator"
-    ],
-    "client": [
-      "net.dvmn2.reloadanim.client.ReloadanimClient"
-    ],
-    "main": [
-      "net.dvmn2.reloadanim.Reloadanim"
-    ]
+    "client": ["net.dvmn2.reloadanim.client.ReloadAnimClient"]
   },
   "mixins": [
-    "reloadanim.mixins.json",
     {
       "config": "reloadanim.client.mixins.json",
       "environment": "client"

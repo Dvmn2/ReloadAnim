@@ -1,9 +1,10 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "net.dvmn2.reloadanim.mixin.client",
+  "package": "net.dvmn2.reloadanim.client.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "SplashOverlayMixin"
   ],
   "injectors": {
     "defaultRequire": 1

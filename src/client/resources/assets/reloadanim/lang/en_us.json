@@ -1,0 +1,10 @@
+{
+  "reloadanim.on": "ReloadAnim enabled.",
+  "reloadanim.off": "ReloadAnim disabled. The vanilla loading screen is back.",
+  "reloadanim.reloaded": "Configuration reloaded.",
+  "reloadanim.status": "ReloadAnim is %s. Pack animations: %s. Cached animation: %s. Intensity: %s. Reduced motion: %s.",
+  "reloadanim.state.on": "on",
+  "reloadanim.state.off": "off",
+  "reloadanim.animation.none": "none",
+  "reloadanim.animation.cached": "%s (%s frame(s) in strip)"
+}

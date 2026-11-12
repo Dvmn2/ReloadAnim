@@ -1,0 +1,10 @@
+{
+  "reloadanim.on": "ReloadAnim включён.",
+  "reloadanim.off": "ReloadAnim выключен. Вернулся ванильный экран загрузки.",
+  "reloadanim.reloaded": "Конфигурация перезагружена.",
+  "reloadanim.status": "ReloadAnim: %s. Анимации из паков: %s. Анимация в кэше: %s. Интенсивность: %s. Без мигания: %s.",
+  "reloadanim.state.on": "вкл",
+  "reloadanim.state.off": "выкл",
+  "reloadanim.animation.none": "нет",
+  "reloadanim.animation.cached": "%s (кадров в ленте: %s)"
+}
